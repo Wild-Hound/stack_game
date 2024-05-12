@@ -22,7 +22,8 @@ const initGame = (stack, boxHeight) => {
   directionalLight.position.set(10, 20, 0);
   scene.add(directionalLight);
 
-  new Cube(0, -1, 0, 0xfb8e00, scene);
+  // new Cube(0, -1, 0, 0xfb8e00, scene);
+  addLayer(0, 0, 1, 1, "z", boxHeight, stack, scene);
   addLayer(-18, 0, 1, 1, "x", boxHeight, stack, scene);
 
   //setup camera
@@ -58,6 +59,25 @@ const addLayer = (x, z, width, depth, direction, boxHeight, stack, scene) => {
   stack.push(cubeObj);
 };
 
+const addOverhang = (
+  x,
+  z,
+  width,
+  depth,
+  boxHeight,
+  stack,
+  overHangStack,
+  scene
+) => {
+  const y = boxHeight * stack.length;
+  const color = `hsl(${30 + stack.length * 4}, 100%, 50%)`;
+
+  const cube = new Cube(x, y, z, color, scene);
+
+  const cubeObj = { threejs: cube, width, depth, direction: "x" };
+  overHangStack.push(cubeObj);
+};
+
 const animation = (stack, scene, camera, boxHeight, renderer) => {
   const speed = 0.15;
   const topLayer = stack[stack.length - 1];
@@ -70,20 +90,63 @@ const animation = (stack, scene, camera, boxHeight, renderer) => {
   renderer.render(scene, camera);
 };
 
-const addBoxToStack = (stack, addLayer) => {
-  console.log("adding new box");
+const addBoxToStack = (stack, addLayer, addOverhang) => {
+  console.log(stack);
   const topLayer = stack[stack.length - 1];
+  const previousLayer = stack[stack.length - 2];
+
   const direction = topLayer.direction;
-  // TODO: remove
-  const previousBoxSize = 1;
 
-  const nextX = direction == "x" ? 0 : -10;
-  const nextZ = direction == "z" ? 0 : -10;
-  const newWidth = previousBoxSize;
-  const newDepth = previousBoxSize;
-  const nextDirection = direction == "x" ? "z" : "x";
+  // find overlap and overhang
+  const delta =
+    topLayer.threejs.position[direction] -
+    previousLayer.threejs.position[direction];
+  const overhangSize = Math.abs(delta);
+  const size = direction === "x" ? topLayer.width : topLayer.depth;
+  const overlap = size - overhangSize;
 
-  addLayer(nextX, nextZ, newWidth, newDepth, nextDirection);
+  // if box overlaps
+  if (overlap > 0) {
+    // overlapping box
+    const newWidth = direction === "x" ? overlap : topLayer.width;
+    const newDepth = direction === "z" ? overlap : topLayer.depth;
+
+    topLayer.width = newWidth;
+    topLayer.depth = newDepth;
+
+    topLayer.threejs.scale[direction] = overlap / size;
+    topLayer.threejs.position[direction] -= delta / 2;
+
+    // overhanging box
+    const overhangShift = (overlap / 2 + overhangSize / 2) * Math.sign(delta);
+    const overhangX =
+      direction === "x"
+        ? topLayer.threejs.position.x + overhangShift
+        : topLayer.threejs.x;
+    const overhangZ =
+      direction === "Z"
+        ? topLayer.threejs.position.z + overhangShift
+        : topLayer.threejs.z;
+    const overhangWidth = direction === "x" ? overhangSize : newWidth;
+    const overhangDepth = direction === "z" ? overhangSize : newDepth;
+
+    addOverhang(overhangX, overhangZ, overhangWidth, overhangDepth);
+
+    // new box
+    const nextX = direction === "x" ? topLayer.threejs.position.x : -10;
+    const nextZ = direction === "z" ? topLayer.threejs.position.z : -10;
+    const nextDirection = direction === "x" ? "z" : "x";
+
+    addLayer(nextX, nextZ, newWidth, newDepth, nextDirection);
+  }
+
+  // const nextX = direction == "x" ? 0 : -10;
+  // const nextZ = direction == "z" ? 0 : -10;
+  // const newWidth = previousBoxSize;
+  // const newDepth = previousBoxSize;
+  // const nextDirection = direction == "x" ? "z" : "x";
+
+  // addLayer(nextX, nextZ, newWidth, newDepth, nextDirection);
 };
 
 const gameClickHandler = (gameStarted, renderer, animation, addBoxToStack) => {
@@ -97,26 +160,27 @@ const gameClickHandler = (gameStarted, renderer, animation, addBoxToStack) => {
   addBoxToStack();
 };
 
-const adapter = (stack, scene, camera, boxHeight, renderer) => {
+const adapter = (stack, overhangStack, scene, camera, boxHeight, renderer) => {
   return {
     addLayer: (x, z, width, depth, direction) =>
       addLayer(x, z, width, depth, direction, boxHeight, stack, scene),
     animation: () => animation(stack, scene, camera, boxHeight, renderer),
+    addOverhang: (x, z, width, depth) =>
+      addOverhang(x, z, width, depth, boxHeight, stack, overhangStack, scene),
   };
 };
 
 const gameStack = [];
+const overhangStack = [];
 const boxHeight = 1;
 const { scene, camera, renderer } = initGame(gameStack, boxHeight);
 let gameStarted = false;
 
-const { addLayer: addLayerTemp, animation: animationTemp } = adapter(
-  gameStack,
-  scene,
-  camera,
-  boxHeight,
-  renderer
-);
+const {
+  addLayer: addLayerTemp,
+  addOverhang: addOverhangTemp,
+  animation: animationTemp,
+} = adapter(gameStack, overhangStack, scene, camera, boxHeight, renderer);
 
 window.addEventListener("click", () => {
   if (!gameStarted) {
@@ -125,7 +189,7 @@ window.addEventListener("click", () => {
     return;
   }
 
-  addBoxToStack(gameStack, addLayerTemp);
+  addBoxToStack(gameStack, addLayerTemp, addOverhangTemp);
 });
 
 renderer.render(scene, camera);
