@@ -1,18 +1,31 @@
 const THREE = window.THREE;
+const CANNON = window.CANNON;
 
 class Cube {
-  constructor(x, y, z, color, scene) {
+  constructor(x, y, z, color, width, depth, boxHeight, falls, scene, world) {
+    // threejs
     const geometry = new THREE.BoxGeometry(3, 1, 3);
     const material = new THREE.MeshLambertMaterial({ color });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
     scene.add(mesh);
-    return mesh;
+
+    // cannonjs
+    const shape = new CANNON.Box(
+      new CANNON.Vec3(width / 2, boxHeight / 2, depth / 2)
+    );
+    let mass = falls ? 5 : 0;
+    const body = new CANNON.Body({ shape, mass });
+    body.position.set(x, y, z);
+    world.addBody(body);
+
+    return { mesh, body };
   }
 }
 
 const initGame = (stack, boxHeight) => {
   const scene = new THREE.Scene();
+  const world = new CANNON.World();
 
   //setup scene
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -22,9 +35,13 @@ const initGame = (stack, boxHeight) => {
   directionalLight.position.set(10, 20, 0);
   scene.add(directionalLight);
 
-  // new Cube(0, -1, 0, 0xfb8e00, scene);
-  addLayer(0, 0, 1, 1, "z", boxHeight, stack, scene);
-  addLayer(-18, 0, 1, 1, "x", boxHeight, stack, scene);
+  // world setup
+  world.gravity.set(0, -10, 0);
+  world.broadphase = new CANNON.NaiveBroadphase();
+  world.solver.iterations = 40;
+
+  addLayer(0, 0, 1, 1, "z", boxHeight, false, stack, scene, world);
+  addLayer(-18, 0, 1, 1, "x", boxHeight, stack, false, scene, world);
 
   //setup camera
   const aspect = window.innerWidth / window.innerHeight;
@@ -46,16 +63,38 @@ const initGame = (stack, boxHeight) => {
   const renderer = new THREE.WebGL1Renderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
 
-  return { scene, camera, renderer };
+  return { scene, world, camera, renderer };
 };
 
-const addLayer = (x, z, width, depth, direction, boxHeight, stack, scene) => {
+const addLayer = (
+  x,
+  z,
+  width,
+  depth,
+  direction,
+  boxHeight,
+  fall,
+  stack,
+  scene,
+  world
+) => {
   const y = boxHeight * stack.length;
   const color = `hsl(${30 + stack.length * 4}, 100%, 50%)`;
 
-  const cube = new Cube(x, y, z, color, scene);
+  const { mesh, body } = new Cube(
+    x,
+    y,
+    z,
+    color,
+    width,
+    depth,
+    boxHeight,
+    fall,
+    scene,
+    world
+  );
 
-  const cubeObj = { threejs: cube, width, depth, direction };
+  const cubeObj = { threejs: mesh, cannonjs: body, width, depth, direction };
   stack.push(cubeObj);
 };
 
@@ -67,12 +106,24 @@ const addOverhang = (
   boxHeight,
   stack,
   overHangStack,
-  scene
+  scene,
+  world
 ) => {
   const y = boxHeight * stack.length;
   const color = `hsl(${30 + stack.length * 4}, 100%, 50%)`;
 
-  const cube = new Cube(x, y, z, color, scene);
+  const cube = new Cube(
+    x,
+    y,
+    z,
+    color,
+    width,
+    depth,
+    boxHeight,
+    true,
+    scene,
+    world
+  );
 
   const cubeObj = { threejs: cube, width, depth, direction: "x" };
   overHangStack.push(cubeObj);
@@ -91,7 +142,6 @@ const animation = (stack, scene, camera, boxHeight, renderer) => {
 };
 
 const addBoxToStack = (stack, addLayer, addOverhang) => {
-  console.log(stack);
   const topLayer = stack[stack.length - 1];
   const previousLayer = stack[stack.length - 2];
 
@@ -137,20 +187,11 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
     const nextZ = direction === "z" ? topLayer.threejs.position.z : -10;
     const nextDirection = direction === "x" ? "z" : "x";
 
-    addLayer(nextX, nextZ, newWidth, newDepth, nextDirection);
+    addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, false);
   }
-
-  // const nextX = direction == "x" ? 0 : -10;
-  // const nextZ = direction == "z" ? 0 : -10;
-  // const newWidth = previousBoxSize;
-  // const newDepth = previousBoxSize;
-  // const nextDirection = direction == "x" ? "z" : "x";
-
-  // addLayer(nextX, nextZ, newWidth, newDepth, nextDirection);
 };
 
 const gameClickHandler = (gameStarted, renderer, animation, addBoxToStack) => {
-  console.log(gameStarted);
   if (!gameStarted) {
     renderer.setAnimationLoop(animation);
     gameStarted = true;
@@ -160,27 +201,64 @@ const gameClickHandler = (gameStarted, renderer, animation, addBoxToStack) => {
   addBoxToStack();
 };
 
-const adapter = (stack, overhangStack, scene, camera, boxHeight, renderer) => {
+const adapter = (
+  stack,
+  overhangStack,
+  scene,
+  world,
+  camera,
+  boxHeight,
+  renderer
+) => {
   return {
-    addLayer: (x, z, width, depth, direction) =>
-      addLayer(x, z, width, depth, direction, boxHeight, stack, scene),
+    addLayer: (x, z, width, depth, direction, fall) =>
+      addLayer(
+        x,
+        z,
+        width,
+        depth,
+        direction,
+        boxHeight,
+        fall,
+        stack,
+        scene,
+        world
+      ),
     animation: () => animation(stack, scene, camera, boxHeight, renderer),
     addOverhang: (x, z, width, depth) =>
-      addOverhang(x, z, width, depth, boxHeight, stack, overhangStack, scene),
+      addOverhang(
+        x,
+        z,
+        width,
+        depth,
+        boxHeight,
+        stack,
+        overhangStack,
+        scene,
+        world
+      ),
   };
 };
 
 const gameStack = [];
 const overhangStack = [];
 const boxHeight = 1;
-const { scene, camera, renderer } = initGame(gameStack, boxHeight);
+const { scene, world, camera, renderer } = initGame(gameStack, boxHeight);
 let gameStarted = false;
 
 const {
   addLayer: addLayerTemp,
   addOverhang: addOverhangTemp,
   animation: animationTemp,
-} = adapter(gameStack, overhangStack, scene, camera, boxHeight, renderer);
+} = adapter(
+  gameStack,
+  overhangStack,
+  scene,
+  world,
+  camera,
+  boxHeight,
+  renderer
+);
 
 window.addEventListener("click", () => {
   if (!gameStarted) {
