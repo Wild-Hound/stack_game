@@ -41,7 +41,7 @@ const initGame = (stack, boxHeight) => {
   world.solver.iterations = 40;
 
   addLayer(0, 0, 1, 1, "z", boxHeight, false, stack, scene, world);
-  addLayer(-18, 0, 1, 1, "x", boxHeight, stack, false, scene, world);
+  addLayer(-18, 0, 1, 1, "x", boxHeight, false, stack, scene, world);
 
   //setup camera
   const aspect = window.innerWidth / window.innerHeight;
@@ -129,16 +129,54 @@ const addOverhang = (
   overHangStack.push(cubeObj);
 };
 
-const animation = (stack, scene, camera, boxHeight, renderer) => {
+const updatePhysics = (world, overhangStack) => {
+  world.step(1 / 60);
+
+  overhangStack.forEach((element) => {
+    element.threejs.position.copy(element.cannonjs.position);
+    element.threejs.quaternion.copy(element.cannonjs.quaternion);
+  });
+};
+
+const animation = (
+  stack,
+  overhangStack,
+  scene,
+  camera,
+  boxHeight,
+  renderer,
+  world
+) => {
   const speed = 0.15;
   const topLayer = stack[stack.length - 1];
   topLayer.threejs.position[topLayer.direction] += speed;
+  topLayer.cannonjs.position[topLayer.direction] += speed;
 
   if (camera.position.y < boxHeight * (stack.length - 2) + 4) {
     camera.position.y += speed;
   }
-
+  updatePhysics(world, overhangStack);
   renderer.render(scene, camera);
+};
+
+const cutBox = (topLayer, overlap, size, delta) => {
+  const direction = topLayer.direction;
+  const newWidth = direction === "x" ? overlap : topLayer.width;
+  const newDepth = direction === "z" ? overlap : topLayer.depth;
+
+  topLayer.width = newWidth;
+  topLayer.depth = newDepth;
+
+  topLayer.threejs.scale[direction] = overlap / size;
+  topLayer.threejs.position[direction] -= delta / 2;
+
+  topLayer.cannonjs.position[direction] -= delta / 2;
+
+  const shape = new CANNON.Box(
+    new CANNON.Vec3(newWidth / 2, boxHeight, newDepth / 2)
+  );
+  topLayer.cannonjs.shapes = [];
+  topLayer.cannonjs.addShape(shape);
 };
 
 const addBoxToStack = (stack, addLayer, addOverhang) => {
@@ -157,15 +195,7 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
 
   // if box overlaps
   if (overlap > 0) {
-    // overlapping box
-    const newWidth = direction === "x" ? overlap : topLayer.width;
-    const newDepth = direction === "z" ? overlap : topLayer.depth;
-
-    topLayer.width = newWidth;
-    topLayer.depth = newDepth;
-
-    topLayer.threejs.scale[direction] = overlap / size;
-    topLayer.threejs.position[direction] -= delta / 2;
+    cutBox(topLayer, overlap, size, delta);
 
     // overhanging box
     const overhangShift = (overlap / 2 + overhangSize / 2) * Math.sign(delta);
@@ -224,7 +254,16 @@ const adapter = (
         scene,
         world
       ),
-    animation: () => animation(stack, scene, camera, boxHeight, renderer),
+    animation: () =>
+      animation(
+        stack,
+        overhangStack,
+        scene,
+        camera,
+        boxHeight,
+        renderer,
+        world
+      ),
     addOverhang: (x, z, width, depth) =>
       addOverhang(
         x,
