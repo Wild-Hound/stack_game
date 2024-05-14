@@ -4,7 +4,7 @@ const CANNON = window.CANNON;
 class Cube {
   constructor(x, y, z, color, width, depth, boxHeight, falls, scene, world) {
     // threejs
-    const geometry = new THREE.BoxGeometry(3, 1, 3);
+    const geometry = new THREE.BoxGeometry(width, boxHeight, depth);
     const material = new THREE.MeshLambertMaterial({ color });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z);
@@ -18,6 +18,8 @@ class Cube {
     const body = new CANNON.Body({ shape, mass });
     body.position.set(x, y, z);
     world.addBody(body);
+    console.log(x, y, z);
+    console.log(body.position);
 
     return { mesh, body };
   }
@@ -40,8 +42,8 @@ const initGame = (stack, boxHeight) => {
   world.broadphase = new CANNON.NaiveBroadphase();
   world.solver.iterations = 40;
 
-  addLayer(0, 0, 1, 1, "z", boxHeight, false, stack, scene, world);
-  addLayer(-18, 0, 1, 1, "x", boxHeight, false, stack, scene, world);
+  addLayer(0, 0, 3, 3, "z", boxHeight, false, stack, scene, world);
+  addLayer(-18, 0, 3, 3, "x", boxHeight, false, stack, scene, world);
 
   //setup camera
   const aspect = window.innerWidth / window.innerHeight;
@@ -139,6 +141,7 @@ const updatePhysics = (world, overhangStack) => {
   world.step(1 / 60);
 
   overhangStack.forEach((element) => {
+    console.log(element.cannonjs.position);
     element.threejs.position.copy(element.cannonjs.position);
     element.threejs.quaternion.copy(element.cannonjs.quaternion);
   });
@@ -179,7 +182,7 @@ const cutBox = (topLayer, overlap, size, delta) => {
   topLayer.cannonjs.position[direction] -= delta / 2;
 
   const shape = new CANNON.Box(
-    new CANNON.Vec3(newWidth / 2, boxHeight, newDepth / 2)
+    new CANNON.Vec3(newWidth / 2, boxHeight / 2, newDepth / 2)
   );
   topLayer.cannonjs.shapes = [];
   topLayer.cannonjs.addShape(shape);
@@ -192,11 +195,11 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
   const direction = topLayer.direction;
 
   // find overlap and overhang
+  const size = direction === "x" ? topLayer.width : topLayer.depth;
   const delta =
     topLayer.threejs.position[direction] -
     previousLayer.threejs.position[direction];
   const overhangSize = Math.abs(delta);
-  const size = direction === "x" ? topLayer.width : topLayer.depth;
   const overlap = size - overhangSize;
 
   // if box overlaps
@@ -217,6 +220,7 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
     const overhangDepth = direction === "z" ? overhangSize : topLayer.depth;
 
     addOverhang(overhangX, overhangZ, overhangWidth, overhangDepth);
+    // addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, true);
 
     // new box
     const nextX = direction === "x" ? topLayer.threejs.position.x : -10;
@@ -225,7 +229,7 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
     const newDepth = topLayer.depth;
     const nextDirection = direction === "x" ? "z" : "x";
 
-    addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, false);
+    addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, true);
   }
 };
 
