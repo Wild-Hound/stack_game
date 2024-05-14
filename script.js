@@ -18,8 +18,6 @@ class Cube {
     const body = new CANNON.Body({ shape, mass });
     body.position.set(x, y, z);
     world.addBody(body);
-    console.log(x, y, z);
-    console.log(body.position);
 
     return { mesh, body };
   }
@@ -141,7 +139,6 @@ const updatePhysics = (world, overhangStack) => {
   world.step(1 / 60);
 
   overhangStack.forEach((element) => {
-    console.log(element.cannonjs.position);
     element.threejs.position.copy(element.cannonjs.position);
     element.threejs.quaternion.copy(element.cannonjs.quaternion);
   });
@@ -211,16 +208,15 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
     const overhangX =
       direction === "x"
         ? topLayer.threejs.position.x + overhangShift
-        : topLayer.threejs.x;
+        : topLayer.threejs.position.x;
     const overhangZ =
       direction === "z"
         ? topLayer.threejs.position.z + overhangShift
-        : topLayer.threejs.z;
+        : topLayer.threejs.position.z;
     const overhangWidth = direction === "x" ? overhangSize : topLayer.width;
     const overhangDepth = direction === "z" ? overhangSize : topLayer.depth;
 
     addOverhang(overhangX, overhangZ, overhangWidth, overhangDepth);
-    // addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, true);
 
     // new box
     const nextX = direction === "x" ? topLayer.threejs.position.x : -10;
