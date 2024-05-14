@@ -125,7 +125,13 @@ const addOverhang = (
     world
   );
 
-  const cubeObj = { threejs: cube, width, depth, direction: "x" };
+  const cubeObj = {
+    threejs: cube.mesh,
+    cannonjs: cube.body,
+    width,
+    depth,
+    direction: "x",
+  };
   overHangStack.push(cubeObj);
 };
 
@@ -204,17 +210,19 @@ const addBoxToStack = (stack, addLayer, addOverhang) => {
         ? topLayer.threejs.position.x + overhangShift
         : topLayer.threejs.x;
     const overhangZ =
-      direction === "Z"
+      direction === "z"
         ? topLayer.threejs.position.z + overhangShift
         : topLayer.threejs.z;
-    const overhangWidth = direction === "x" ? overhangSize : newWidth;
-    const overhangDepth = direction === "z" ? overhangSize : newDepth;
+    const overhangWidth = direction === "x" ? overhangSize : topLayer.width;
+    const overhangDepth = direction === "z" ? overhangSize : topLayer.depth;
 
     addOverhang(overhangX, overhangZ, overhangWidth, overhangDepth);
 
     // new box
     const nextX = direction === "x" ? topLayer.threejs.position.x : -10;
     const nextZ = direction === "z" ? topLayer.threejs.position.z : -10;
+    const newWidth = topLayer.width;
+    const newDepth = topLayer.depth;
     const nextDirection = direction === "x" ? "z" : "x";
 
     addLayer(nextX, nextZ, newWidth, newDepth, nextDirection, false);
