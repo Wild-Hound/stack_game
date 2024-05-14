@@ -109,7 +109,7 @@ const addOverhang = (
   scene,
   world
 ) => {
-  const y = boxHeight * stack.length;
+  const y = boxHeight * (stack.length - 1);
   const color = `hsl(${30 + stack.length * 4}, 100%, 50%)`;
 
   const cube = new Cube(
